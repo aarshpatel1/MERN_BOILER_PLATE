@@ -1,5 +1,5 @@
 import User from "../models/user.js";
-import  generateJWT  from "../utils/generateJWT.js";
+import generateJWT from "../utils/generateJWT.js";
 
 export const allUsers = async (req, res) => {
 	try {
@@ -7,6 +7,90 @@ export const allUsers = async (req, res) => {
 		return res.status(200).json({
 			message: "All users fetched successfully..!!",
 			users,
+		});
+	} catch (error) {
+		console.log("Internal Server Error fetching all users: ", error);
+		return res.status(500).json({
+			message: "Internal Server Error..!!",
+		});
+	}
+};
+
+export const allUsersWithOptions = async (req, res) => {
+	try {
+		const search = req.query.search || "";
+		const query = search
+			? {
+					$or: [{ username: { $regex: new RegExp(search, "i") } }],
+			  }
+			: {};
+
+		const sortField = ["username"].includes(req.query.sortField)
+			? req.query.sortField
+			: "createdAt";
+		const sortDirection = req.query.sortDirection === "desc" ? -1 : 1;
+		const sortOptions = { [sortField]: sortDirection };
+
+		const currentPage = Math.max(0, parseInt(req.query.page) || 0);
+		const recordsPerPage = Math.min(
+			100,
+			Math.max(1, parseInt(req.query.recordsPerPage) || 5)
+		);
+
+		const totalUsers = await User.countDocuments(query);
+		const totalPages = Math.ceil(totalUsers / recordsPerPage);
+
+		if (totalUsers === 0) {
+			return res.status(200).json({
+				message: "No user found matching your criteria..!!",
+				allUsers: [],
+				pagination: {
+					totalUsers,
+					totalPages,
+					currentPage,
+					recordsPerPage,
+					recordsOnThisPage: 0,
+					hasNextPage: false,
+					hasPreviousPage: false,
+				},
+				filters: {
+					search,
+					sortField,
+					sortDirection: sortDirection === -1 ? "desc" : "asc",
+				},
+			});
+		}
+
+		if (totalUsers > 0 && currentPage >= totalPages) {
+			return res.status(400).json({
+				message: "Pages out of range..!!",
+				totalPages: totalPages > 0 ? totalPages - 1 : 0,
+			});
+		}
+
+		const users = await User.find(query)
+			.select("-password")
+			.sort(sortOptions)
+			.skip(currentPage * recordsPerPage)
+			.limit(recordsPerPage);
+
+		return res.status(200).json({
+			message: "Users fetched successfully..!!",
+			users,
+			pagination: {
+				totalPages: totalPages > 0 ? totalPages - 1 : 0,
+				currentPage,
+				recordsPerPage,
+				recordsOnThisPage: allUsers.length,
+				totalUsers,
+				hasNextPage: currentPage < totalPages - 1,
+				hasPreviousPage: currentPage > 0,
+			},
+			filters: {
+				search,
+				sortField,
+				sortDirection: sortDirection === -1 ? "desc" : "asc",
+			},
 		});
 	} catch (error) {
 		console.log("Internal Server Error fetching all users: ", error);
