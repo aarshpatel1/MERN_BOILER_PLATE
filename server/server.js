@@ -4,6 +4,9 @@ import { configDotenv } from "dotenv";
 import db from "./config/db.js";
 import router from "./routes/index.js";
 
+import session from "express-session";
+import passport from "passport";
+
 configDotenv({
 	quiet: true,
 });
@@ -15,7 +18,23 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router)
+app.use(
+	session({
+		name: "passportJWT",
+		secret: process.env.JWT_SECRET,
+		resave: false,
+		saveUninitialized: false,
+		cookie: {
+			maxAge: 1000 * 60 * 60,
+			httpOnly: true,
+		},
+	})
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.use("/api", router);
 
 app.listen(port, (err) => {
 	err
